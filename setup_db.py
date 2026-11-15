@@ -55,8 +55,8 @@ def run_sql_file(file_path):
             try:
                 cursor.execute(clean_stmt)
             except MySQLdb.Error as e:
-                # 1062 = duplicate entry, 1007 = database already exists
-                if e.args[0] in (1062, 1007):
+                # 1062 = duplicate entry, 1007 = database already exists, 1050 = table already exists
+                if e.args[0] in (1062, 1007, 1050):
                     pass
                 else:
                     print(f"Notice: {e}")
@@ -85,33 +85,41 @@ import django
 django.setup()
 
 from django.core.management import call_command
-call_command('migrate', interactive=False)
+try:
+    call_command('migrate', fake_initial=True, interactive=False)
+    print("Migrations applied successfully!")
+except Exception as e:
+    print(f"Migration notice: {e}")
 
 # Create Superuser Admin3 and link to Librarian Profile
 print("\nEnsuring Django superuser 'Admin3' exists...")
 from django.contrib.auth import get_user_model
 User = get_user_model()
 
-if not User.objects.filter(username='Admin3').exists():
-    u = User.objects.create_superuser('Admin3', 'admin3@college.edu', 'Admin#2024')
-    print("Superuser 'Admin3' successfully created!")
-else:
-    u = User.objects.get(username='Admin3')
-    u.set_password('Admin#2024')
-    u.is_superuser = True
-    u.is_staff = True
-    u.save()
-    print("Superuser 'Admin3' password updated!")
-
 try:
+    if not User.objects.filter(username='Admin3').exists():
+        u = User.objects.create_superuser('Admin3', 'admin3@college.edu', 'Admin#2024')
+        print("Superuser 'Admin3' successfully created!")
+    else:
+        u = User.objects.get(username='Admin3')
+        u.set_password('Admin#2024')
+        u.is_superuser = True
+        u.is_staff = True
+        u.save()
+        print("Superuser 'Admin3' password updated!")
+
     from library_app.models import Members, UserProfile
     member = Members.objects.filter(member_type='LIBRARIAN').first()
     if not member:
         member = Members.objects.first()
-    if member and not UserProfile.objects.filter(user=u).exists():
-        UserProfile.objects.create(user=u, member=member)
-        print(f"Linked Admin3 to Librarian member: {member.full_name}")
+    if member:
+        profile = UserProfile.objects.filter(user=u).first()
+        if not profile:
+            UserProfile.objects.create(user=u, member=member)
+            print(f"Linked Admin3 to Librarian member: {member.full_name}")
+        else:
+            print("Admin3 is already linked to membership profile.")
 except Exception as e:
-    print(f"Profile link notice: {e}")
+    print(f"User setup notice: {e}")
 
 print("\nSetup finished successfully!")
