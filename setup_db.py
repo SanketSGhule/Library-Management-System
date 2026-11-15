@@ -78,18 +78,20 @@ finally:
     cursor.close()
     conn.close()
 
-# Run Django migrations
-print("\nRunning Django migrations...")
-os.environ["DJANGO_SETTINGS_MODULE"] = "LibraryManagementSystem.settings"
-os.system(f'"{sys.executable}" manage.py migrate')
+# Setup Django directly inside Python
+print("\nSetting up Django and running migrations...")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LibraryManagementSystem.settings")
+import django
+django.setup()
+
+from django.core.management import call_command
+call_command('migrate', interactive=False)
 
 # Create Superuser Admin3 and link to Librarian Profile
 print("\nEnsuring Django superuser 'Admin3' exists...")
-create_admin_code = """
-import django
-django.setup()
 from django.contrib.auth import get_user_model
 User = get_user_model()
+
 if not User.objects.filter(username='Admin3').exists():
     u = User.objects.create_superuser('Admin3', 'admin3@college.edu', 'Admin#2024')
     print("Superuser 'Admin3' successfully created!")
@@ -111,6 +113,5 @@ try:
         print(f"Linked Admin3 to Librarian member: {member.full_name}")
 except Exception as e:
     print(f"Profile link notice: {e}")
-"""
-os.system(f'"{sys.executable}" -c "{create_admin_code}"')
-print("\nSetup finished!")
+
+print("\nSetup finished successfully!")
