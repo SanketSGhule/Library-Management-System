@@ -414,11 +414,15 @@ def add_member(request):
                         member_id=new_member.member_id
                     )
 
-                except IntegrityError:
+                except IntegrityError as e:
                     form.add_error(
                         None,
-                        "Could not create the member. A username, college ID, "
-                        "or email may already exist. Please check the details."
+                        f"Could not create member. Duplicate username, college ID, or email: {e}"
+                    )
+                except Exception as e:
+                    form.add_error(
+                        None,
+                        f"Database error while creating member: {e}"
                     )
     else:
         form = MemberRegistrationForm()
