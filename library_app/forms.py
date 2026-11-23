@@ -974,6 +974,13 @@ class MemberRegistrationForm(forms.ModelForm):
         empty_label="Select department",
     )
 
+    joining_date = forms.DateField(
+        input_formats=["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y"],
+        widget=forms.DateInput(attrs={
+            "type": "date",
+        }),
+    )
+
     class Meta:
         model = Members
         fields = [
@@ -999,12 +1006,9 @@ class MemberRegistrationForm(forms.ModelForm):
             "phone": forms.TextInput(attrs={
                 "placeholder": "Enter phone number",
             }),
-            "joining_date" = forms.DateField(
-                input_formats=["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y"],
-                widget=forms.DateInput(attrs={
-                    "type": "date",
-                }),
-            )
+            "joining_date": forms.DateInput(attrs={
+                "type": "date",
+            }),
         }
 
     def __init__(self, *args, **kwargs):
@@ -1014,12 +1018,16 @@ class MemberRegistrationForm(forms.ModelForm):
     def clean_username(self):
         username = self.cleaned_data["username"].strip()
         if " " in username:
-            raise forms.ValidationError("Username cannot contain spaces.")
+            raise forms.ValidationError(
+                "Username cannot contain spaces."
+            )
         User = get_user_model()
+
         if User._default_manager.filter(username__iexact=username).exists():
             raise forms.ValidationError(
                 "This username is already taken. Choose another username."
             )
+
         return username
 
     def clean_password2(self):
@@ -1046,21 +1054,15 @@ class MemberRegistrationForm(forms.ModelForm):
             except forms.ValidationError as error:
                 self.add_error("password1", error)
 
+        for field_name in self.errors:
+            if field_name in self.fields:
+                w_attrs = self.fields[field_name].widget.attrs
+                curr_cls = w_attrs.get("class", "")
+                if "border-red-500" not in curr_cls:
+                    w_attrs["class"] = curr_cls.replace("border-slate-300", "border-red-500") + " border-red-500 ring-2 ring-red-100 bg-red-50/10"
+
         return cleaned_data
 
-    def clean_full_name(self):
-        return self.cleaned_data["full_name"].strip()
-
-    def clean_username(self):
-        username = self.cleaned_data["username"].strip()
-        if " " in username:
-            raise forms.ValidationError("Username cannot contain spaces.")
-        User = get_user_model()
-        if User._default_manager.filter(username__iexact=username).exists():
-            raise forms.ValidationError(
-                "This username is already taken. Choose another username."
-            )
-        return username
     def clean_college_id(self):
         college_id = self.cleaned_data["college_id"].strip()
         if Members.objects.filter(college_id__iexact=college_id).exists():
@@ -1068,6 +1070,10 @@ class MemberRegistrationForm(forms.ModelForm):
                 "This College ID is already registered to an existing member."
             )
         return college_id
+
+    def clean_full_name(self):
+        return self.cleaned_data["full_name"].strip()
+
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
         if Members.objects.filter(email__iexact=email).exists():
@@ -1075,6 +1081,7 @@ class MemberRegistrationForm(forms.ModelForm):
                 "This email address is already registered."
             )
         return email
+
     def clean_phone(self):
         phone = self.cleaned_data.get("phone", "")
         if phone:
@@ -1086,24 +1093,6 @@ class MemberRegistrationForm(forms.ModelForm):
                 )
             return cleaned_phone
         return None
-    def clean(self):
-        cleaned_data = super().clean()
-        password = cleaned_data.get("password1")
-        username = cleaned_data.get("username")
-        if password and username:
-            User = get_user_model()
-            temporary_user = User(username=username)
-            try:
-                validate_password(password, user=temporary_user)
-            except forms.ValidationError as error:
-                self.add_error("password1", error)
-        for field_name in self.errors:
-            if field_name in self.fields:
-                w_attrs = self.fields[field_name].widget.attrs
-                curr_cls = w_attrs.get("class", "")
-                if "border-red-500" not in curr_cls:
-                    w_attrs["class"] = curr_cls.replace("border-slate-300", "border-red-500") + " border-red-500 ring-2 ring-red-100 bg-red-50/10"
-        return cleaned_data
 
 
 
@@ -1133,6 +1122,13 @@ class MemberUpdateForm(forms.ModelForm):
         queryset=Departments.objects.order_by("department_name"),
         required=False,
         empty_label="Select department",
+    )
+
+    joining_date = forms.DateField(
+        input_formats=["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y"],
+        widget=forms.DateInput(attrs={
+            "type": "date",
+        }),
     )
 
     class Meta:
@@ -1170,17 +1166,51 @@ class MemberUpdateForm(forms.ModelForm):
         apply_form_styles(self.fields)
 
     def clean_college_id(self):
-        return self.cleaned_data["college_id"].strip()
+        college_id = self.cleaned_data["college_id"].strip()
+        qs = Members.objects.filter(college_id__iexact=college_id)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(
+                "This College ID is already registered to another member."
+            )
+        return college_id
 
     def clean_full_name(self):
         return self.cleaned_data["full_name"].strip()
 
     def clean_email(self):
-        return self.cleaned_data["email"].strip().lower()
+        email = self.cleaned_data["email"].strip().lower()
+        qs = Members.objects.filter(email__iexact=email)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(
+                "This email address is already registered."
+            )
+        return email
 
     def clean_phone(self):
         phone = self.cleaned_data.get("phone", "")
-        return phone.strip() or None
+        if phone:
+            phone = phone.strip()
+            cleaned_phone = phone.replace(" ", "").replace("-", "")
+            if len(cleaned_phone) > 15:
+                raise forms.ValidationError(
+                    "Phone number cannot exceed 15 digits."
+                )
+            return cleaned_phone
+        return None
+
+    def clean(self):
+        cleaned_data = super().clean()
+        for field_name in self.errors:
+            if field_name in self.fields:
+                w_attrs = self.fields[field_name].widget.attrs
+                curr_cls = w_attrs.get("class", "")
+                if "border-red-500" not in curr_cls:
+                    w_attrs["class"] = curr_cls.replace("border-slate-300", "border-red-500") + " border-red-500 ring-2 ring-red-100 bg-red-50/10"
+        return cleaned_data
 
 
 class MemberPasswordResetForm(forms.Form):

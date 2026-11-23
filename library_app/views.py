@@ -73,6 +73,81 @@ def member_login(request):
     return render(request, 'library_app/login.html')
 
 
+# @login_required
+# def dashboard(request):
+#     try:
+#         profile = request.user.profile
+#     except UserProfile.DoesNotExist:
+#         logout(request)
+#         messages.error(
+#             request,
+#             'Your account is not linked to a library membership.'
+#         )
+#         return redirect('member_login')
+
+#     member = profile.member
+
+#     # Book catalogue statistics
+#     total_books = Books.objects.count()
+#     total_copies = BookCopies.objects.count()
+#     available_copies = BookCopies.objects.filter(
+#         copy_status='AVAILABLE'
+#     ).count()
+
+#     # Circulation statistics
+#     issued_loans = Loans.objects.filter(
+#         loan_status='ISSUED'
+#     ).count()
+
+#     # Reservation statistics
+#     pending_reservations = Reservations.objects.filter(
+#         reservation_status='PENDING'
+#     ).count()
+
+#     # Calculate the actual outstanding fine balance.
+#     # Multiple payments against one fine are added together.
+#     fine_balances = Fines.objects.annotate(
+#         paid_amount=Coalesce(
+#             Sum('payments__amount'),
+#             Value(Decimal('0.00')),
+#             output_field=DecimalField(
+#                 max_digits=10,
+#                 decimal_places=2
+#             )
+#         )
+#     ).values('fine_amount', 'paid_amount')
+
+#     outstanding_fines = sum(
+#         (
+#             max(
+#                 fine['fine_amount'] - fine['paid_amount'],
+#                 Decimal('0.00')
+#             )
+#             for fine in fine_balances
+#         ),
+#         Decimal('0.00')
+#     )
+
+#     context = {
+#         'profile': profile,
+#         'member': member,
+#         'page_title': 'Dashboard',
+
+#         'total_books': total_books,
+#         'total_copies': total_copies,
+#         'available_copies': available_copies,
+#         'issued_loans': issued_loans,
+#         'pending_reservations': pending_reservations,
+#         'outstanding_fines': outstanding_fines,
+#     }
+
+#     return render(
+#         request,
+#         'library_app/dashboard.html',
+#         context
+#     )
+
+
 @login_required
 def dashboard(request):
     try:
@@ -300,6 +375,7 @@ def add_member(request):
             form = MemberRegistrationForm(request.POST)
 
             if form.is_valid():
+
                 # Only a Django superuser can create another librarian account.
                 if (
                     form.cleaned_data["member_type"] == "LIBRARIAN"
@@ -477,12 +553,32 @@ def edit_member(request, member_id):
                         member_id=updated_member.member_id,
                     )
 
-                except IntegrityError:
-                    form.add_error(
-                        None,
-                        "Could not update the member. Check whether the "
-                        "college ID or email is already being used."
-                    )
+                except IntegrityError as e:
+                    err_msg = str(e).lower()
+                    if "college_id" in err_msg:
+                        form.add_error("college_id", "This College ID is already registered to another member.")
+                    elif "email" in err_msg:
+                        form.add_error("email", "This email address is already registered.")
+                    elif "phone" in err_msg:
+                        form.add_error("phone", "Phone number is already registered or invalid.")
+                    else:
+                        form.add_error(
+                            None,
+                            "Could not update the member. Check whether the "
+                            "college ID or email is already being used."
+                        )
+                except DatabaseError as e:
+                    err_msg = str(e).lower()
+                    if "phone" in err_msg or "data too long" in err_msg or "1406" in err_msg:
+                        form.add_error("phone", "Phone number is too long (maximum 15 characters).")
+                    elif "date" in err_msg:
+                        form.add_error("joining_date", "Invalid date format. Please use YYYY-MM-DD.")
+                    elif "department" in err_msg:
+                        form.add_error("department", "Please select a valid department.")
+                    else:
+                        form.add_error(None, f"Database error: {e}")
+                except Exception as e:
+                    form.add_error(None, f"Error updating member: {e}")
 
     else:
         form = MemberUpdateForm(instance=target_member)

@@ -27,7 +27,7 @@
         </a>
     </div>
 
-    <!-- Overall Form Error Alert Banner -->
+    <!-- Overall Form Error Alert Banner (Shows when server returns errors) -->
     {% if form.errors %}
     <div id="server-error-banner" class="rounded-xl border border-red-300 bg-red-50 p-5 shadow-sm transition">
         <div class="flex items-start gap-3">
@@ -54,7 +54,7 @@
     </div>
     {% endif %}
 
-    <!-- Client-side Validation Error Banner -->
+    <!-- Client-side Validation Error Banner (Triggered via JavaScript) -->
     <div id="client-error-banner" class="hidden rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm transition">
         <div class="flex items-start gap-3">
             <div class="flex-shrink-0 text-xl text-amber-600">⚠️</div>
@@ -104,6 +104,7 @@
                                 <p class="mt-1 text-xs text-slate-500">{{ field.help_text }}</p>
                             {% endif %}
 
+                            <!-- Server-rendered field error -->
                             <div class="error-wrapper">
                                 {% for error in field.errors %}
                                     <p class="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-red-600 server-error">
@@ -113,6 +114,7 @@
                                         <span>{{ error }}</span>
                                     </p>
                                 {% endfor %}
+                                <!-- Client-rendered dynamic error -->
                                 <p class="mt-1.5 hidden items-center gap-1.5 text-xs font-semibold text-red-600 client-error">
                                     <svg class="w-4 h-4 flex-shrink-0 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                                         <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
@@ -155,6 +157,7 @@
                                 <p class="mt-1 text-xs text-slate-500">{{ field.help_text }}</p>
                             {% endif %}
 
+                            <!-- Server-rendered field error -->
                             <div class="error-wrapper">
                                 {% for error in field.errors %}
                                     <p class="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-red-600 server-error">
@@ -164,6 +167,7 @@
                                         <span>{{ error }}</span>
                                     </p>
                                 {% endfor %}
+                                <!-- Client-rendered dynamic error -->
                                 <p class="mt-1.5 hidden items-center gap-1.5 text-xs font-semibold text-red-600 client-error">
                                     <svg class="w-4 h-4 flex-shrink-0 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                                         <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
@@ -211,6 +215,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const toastContainer = document.getElementById('toast-container');
     const clientBanner = document.getElementById('client-error-banner');
 
+    // Helper: Display floating toast popup notification
     function showToast(title, message, isError = true) {
         if (!toastContainer) return;
         const toast = document.createElement('div');
@@ -227,6 +232,7 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         toastContainer.appendChild(toast);
 
+        // Auto remove after 5 seconds
         setTimeout(() => {
             toast.style.opacity = '0';
             toast.style.transform = 'translateY(-10px)';
@@ -234,6 +240,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 5000);
     }
 
+    // Highlight server-side errors on page load
     const fieldGroups = document.querySelectorAll('.field-group');
     let hasServerErrors = false;
 
@@ -246,6 +253,7 @@ document.addEventListener('DOMContentLoaded', function() {
             input.classList.add('border-red-500', 'focus:border-red-500', 'ring-2', 'ring-red-100', 'bg-red-50/10');
         }
 
+        // Clear error styling when user types or changes input
         if (input) {
             const clearError = () => {
                 input.classList.remove('border-red-500', 'focus:border-red-500', 'ring-2', 'ring-red-100', 'bg-red-50/10');
@@ -264,6 +272,7 @@ document.addEventListener('DOMContentLoaded', function() {
         showToast('Registration Error', 'Please check the highlighted fields below.', true);
     }
 
+    // Set error on a specific field
     function setFieldError(fieldName, errorMsg) {
         const group = document.querySelector(`.field-group[data-field-name="${fieldName}"]`);
         if (!group) return;
@@ -282,6 +291,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Clear all client-side errors
     function clearAllClientErrors() {
         if (clientBanner) clientBanner.classList.add('hidden');
         fieldGroups.forEach(group => {
@@ -293,6 +303,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Instant client-side validation on form submit
     if (form) {
         form.addEventListener('submit', function(e) {
             clearAllClientErrors();
@@ -308,6 +319,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
+            // 1. Validate Required Fields
             const collegeId = form.querySelector('[name="college_id"]');
             if (collegeId && !collegeId.value.trim()) {
                 flagError('college_id', 'This College ID field is required.');
@@ -338,6 +350,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 flagError('joining_date', 'Please select a valid joining date.');
             }
 
+            // 2. Validate Phone (Max 15 digits)
             const phone = form.querySelector('[name="phone"]');
             if (phone && phone.value.trim()) {
                 const cleanPhone = phone.value.trim().replace(/[\s\-()]/g, '');
@@ -346,6 +359,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
+            // 3. Validate Username
             const username = form.querySelector('[name="username"]');
             if (username) {
                 const uVal = username.value.trim();
@@ -356,6 +370,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
+            // 4. Validate Passwords
             const pass1 = form.querySelector('[name="password1"]');
             const pass2 = form.querySelector('[name="password2"]');
             if (pass1 && !pass1.value) {
@@ -370,6 +385,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 flagError('password2', 'The passwords do not match.');
             }
 
+            // If client errors exist, halt submission and display notifications
             if (hasError) {
                 e.preventDefault();
                 if (clientBanner) {
