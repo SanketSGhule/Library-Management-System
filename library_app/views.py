@@ -73,81 +73,6 @@ def member_login(request):
     return render(request, 'library_app/login.html')
 
 
-# @login_required
-# def dashboard(request):
-#     try:
-#         profile = request.user.profile
-#     except UserProfile.DoesNotExist:
-#         logout(request)
-#         messages.error(
-#             request,
-#             'Your account is not linked to a library membership.'
-#         )
-#         return redirect('member_login')
-
-#     member = profile.member
-
-#     # Book catalogue statistics
-#     total_books = Books.objects.count()
-#     total_copies = BookCopies.objects.count()
-#     available_copies = BookCopies.objects.filter(
-#         copy_status='AVAILABLE'
-#     ).count()
-
-#     # Circulation statistics
-#     issued_loans = Loans.objects.filter(
-#         loan_status='ISSUED'
-#     ).count()
-
-#     # Reservation statistics
-#     pending_reservations = Reservations.objects.filter(
-#         reservation_status='PENDING'
-#     ).count()
-
-#     # Calculate the actual outstanding fine balance.
-#     # Multiple payments against one fine are added together.
-#     fine_balances = Fines.objects.annotate(
-#         paid_amount=Coalesce(
-#             Sum('payments__amount'),
-#             Value(Decimal('0.00')),
-#             output_field=DecimalField(
-#                 max_digits=10,
-#                 decimal_places=2
-#             )
-#         )
-#     ).values('fine_amount', 'paid_amount')
-
-#     outstanding_fines = sum(
-#         (
-#             max(
-#                 fine['fine_amount'] - fine['paid_amount'],
-#                 Decimal('0.00')
-#             )
-#             for fine in fine_balances
-#         ),
-#         Decimal('0.00')
-#     )
-
-#     context = {
-#         'profile': profile,
-#         'member': member,
-#         'page_title': 'Dashboard',
-
-#         'total_books': total_books,
-#         'total_copies': total_copies,
-#         'available_copies': available_copies,
-#         'issued_loans': issued_loans,
-#         'pending_reservations': pending_reservations,
-#         'outstanding_fines': outstanding_fines,
-#     }
-
-#     return render(
-#         request,
-#         'library_app/dashboard.html',
-#         context
-#     )
-
-
 @login_required
 def dashboard(request):
     try:
@@ -365,72 +290,95 @@ def members_directory(request):
 @login_required
 @librarian_required
 def add_member(request):
+    try:
+        current_member = request.user.profile.member
+    except Exception:
+        current_member = None
+
     if request.method == "POST":
-        form = MemberRegistrationForm(request.POST)
+        try:
+            form = MemberRegistrationForm(request.POST)
 
-        if form.is_valid():
-
-            # Only a Django superuser can create another librarian account.
-            if (
-                form.cleaned_data["member_type"] == "LIBRARIAN"
-                and not request.user.is_superuser
-            ):
-                form.add_error(
-                    "member_type",
-                    "Only a superuser can create a librarian account."
-                )
-            else:
-                User = get_user_model()
-
-                try:
-                    with transaction.atomic():
-                        # 1. Create the library member.
-                        new_member = form.save()
-
-                        # 2. Create the individual Django login account.
-                        new_user = User(
-                            username=form.cleaned_data["username"],
-                            is_active=(
-                                new_member.membership_status == "ACTIVE"
-                            ),
-                        )
-                        new_user.set_password(
-                            form.cleaned_data["password1"]
-                        )
-                        new_user.save()
-
-                        # 3. Link the login account to the member.
-                        UserProfile.objects.create(
-                            user=new_user,
-                            member=new_member,
-                        )
-
-                    messages.success(
-                        request,
-                        f"Member '{new_member.full_name}' was created successfully."
-                    )
-                    return redirect(
-                        "member_detail",
-                        member_id=new_member.member_id
-                    )
-
-                except IntegrityError as e:
+            if form.is_valid():
+                # Only a Django superuser can create another librarian account.
+                if (
+                    form.cleaned_data["member_type"] == "LIBRARIAN"
+                    and not request.user.is_superuser
+                ):
                     form.add_error(
-                        None,
-                        f"Could not create member. Duplicate username, college ID, or email: {e}"
+                        "member_type",
+                        "Only a superuser can create a librarian account."
                     )
-                except Exception as e:
-                    form.add_error(
-                        None,
-                        f"Database error while creating member: {e}"
-                    )
+                else:
+                    User = get_user_model()
+
+                    try:
+                        with transaction.atomic():
+                            # 1. Create the library member.
+                            new_member = form.save()
+
+                            # 2. Create the individual Django login account.
+                            new_user = User(
+                                username=form.cleaned_data["username"],
+                                is_active=(
+                                    new_member.membership_status == "ACTIVE"
+                                ),
+                            )
+                            new_user.set_password(
+                                form.cleaned_data["password1"]
+                            )
+                            new_user.save()
+
+                            # 3. Link the login account to the member.
+                            UserProfile.objects.create(
+                                user=new_user,
+                                member=new_member,
+                            )
+
+                        messages.success(
+                            request,
+                            f"Member '{new_member.full_name}' was created successfully."
+                        )
+                        return redirect(
+                            "member_detail",
+                            member_id=new_member.member_id
+                        )
+
+                    except IntegrityError as e:
+                        err_msg = str(e).lower()
+                        if "college_id" in err_msg:
+                            form.add_error("college_id", "This College ID is already registered.")
+                        elif "email" in err_msg:
+                            form.add_error("email", "This email address is already registered.")
+                        elif "username" in err_msg:
+                            form.add_error("username", "This username is already taken.")
+                        elif "phone" in err_msg:
+                            form.add_error("phone", "Phone number is too long or invalid.")
+                        else:
+                            form.add_error(None, f"Duplicate data error: {e}")
+                    except DatabaseError as e:
+                        err_msg = str(e).lower()
+                        if "phone" in err_msg or "data too long" in err_msg or "1406" in err_msg:
+                            form.add_error("phone", "Phone number is too long (maximum 15 characters).")
+                        elif "date" in err_msg:
+                            form.add_error("joining_date", "Invalid date format. Please use YYYY-MM-DD.")
+                        elif "department" in err_msg:
+                            form.add_error("department", "Please select a valid department.")
+                        else:
+                            form.add_error(None, f"Database error: {e}")
+                    except Exception as e:
+                        form.add_error(None, f"Error saving member: {e}")
+        except Exception as e:
+            if "form" not in locals():
+                form = MemberRegistrationForm()
+            form.add_error(None, f"Unable to process form submission: {e}")
     else:
         form = MemberRegistrationForm()
 
     context = {
         "page_title": "Add Member",
         "form": form,
-        "member": request.user.profile.member,
+        "member": current_member,
     }
 
     return render(
